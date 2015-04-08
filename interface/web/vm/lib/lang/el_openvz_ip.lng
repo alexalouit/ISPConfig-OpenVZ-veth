@@ -1,0 +1,12 @@
+<?php
+$wb['server_id_txt'] = 'Hostserver';
+$wb['ip_address_txt'] = 'Διεύθυνση IP';
+$wb['vm_id_txt'] = 'Εικονικός server';
+$wb['reserved_txt'] = 'Reserved';
+$wb['ip_error_wrong'] = 'Παρακαλούμε συμπληρώστε μια έγκυρη διεύθυνση IPv4.';
+$wb['ip_error_unique'] = 'Η διεύθυνση IP υπάρχει ήδη.';
+$wb['IP address'] = 'Διεύθυνση IP';
+$wb["macaddr_txt"] = 'MACADDR';
+$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
+$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+?>
