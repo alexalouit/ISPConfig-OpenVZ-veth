@@ -2,9 +2,14 @@ ISPConfig OpenVZ (vserver) veth
 =========================
 
 
-# INSTALLATION (as root)
+# REQUIREMENTS
 
-!! As default, all veth use vmbr0 bridge (file: /usr/local/ispconfig/interface/web/vm/templates/openvz-veth.conf.tpl). !!
+As default, all veth use vmbr0 bridge (file: /usr/local/ispconfig/interface/web/vm/templates/openvz-veth.conf.tpl)
+
+OpenVZ must have correct automatic bridging configuration (see: https://wiki.openvz.org/Virtual_Ethernet_device#Automating_the_bridge)
+
+
+# INSTALLATION (as root)
 
 ```
 git clone https://github.com/alexalouit/ISPConfig-OpenVZ-veth.git
@@ -12,7 +17,7 @@ cd ISPConfig-OpenVZ-veth
 php -q install.php
 ```
 
-Add a macaddr field in "Openvz IP address" page. If is empty, use a clasical venet, if is set, create a veth and configure it (see note).
+Add a macaddr field in "OpenVZ IP address" page. If is empty, use a clasical venet, if is set, create a veth and configure it (see note)
 
 
 ## COMPATIBILITY

@@ -205,7 +205,14 @@ class vm_openvz_plugin {
 		$tpl->setVar('hostname', $hostname);
 
 		if(isset($tmp['macaddr']) && !empty($tmp['macaddr'])) {
-			$tpl->setVar('netif', $tmp['macaddr']);
+			// fetch vmbr0 macaddr
+			$return = shell_exec('ifconfig vmbr0 | grep HWaddr');
+			preg_match("(?:[A-Fa-f0-9]{2}[:-]){5}(?:[A-Fa-f0-9]{2})", $return, $matches);
+			$host_macaddr = $matches[0];
+
+			$tpl->setVar('macaddr', $tmp['macaddr']);
+			$tpl->setVar('veid', $tmp['veid']);
+			$tpl->setVar('host_macaddr', $host_macaddr);
 		} else {
 			$tpl->setVar('ip_address', $vm['ip_address']);
 		}
@@ -213,9 +220,9 @@ class vm_openvz_plugin {
 		$tpl->setVar('nameserver', $vm['nameserver']);
 		$tpl->setVar('capability', $vm['capability']);
 
-		$tmp = $app->db->queryOneRecord("SELECT template_file FROM openvz_ostemplate WHERE ostemplate_id = ".$app->functions->intval($vm['ostemplate_id']));
-		$tpl->setVar('ostemplate', $tmp['template_file']);
-		unset($tmp);
+		$tmp1 = $app->db->queryOneRecord("SELECT template_file FROM openvz_ostemplate WHERE ostemplate_id = ".$app->functions->intval($vm['ostemplate_id']));
+		$tpl->setVar('ostemplate', $tmp1['template_file']);
+		unset($tmp1);
 
 		$openvz_config = $app->db->quote($tpl->grab());
 		$app->db->query("UPDATE openvz_vm SET config = '".$openvz_config."' WHERE vm_id = ".$app->functions->intval($this->id));

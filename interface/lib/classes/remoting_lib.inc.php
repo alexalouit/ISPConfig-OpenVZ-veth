@@ -639,7 +639,7 @@ class remoting_lib {
 				if($validator['allowempty'] == 'y' && $field_value == '') {
 					//* Do nothing
 				} else {
-					if(!preg_match("/^(?:[0-9A-F]{2}[:]?){5}(?:[0-9A-F]{2}?)$/i", $field_value)) {
+					if(!preg_match("(?:[A-Fa-f0-9]{2}[:-]){5}(?:[A-Fa-f0-9]{2})", $field_value)) {
 						$errmsg = $validator['errmsg'];
 						if(isset($this->wordbook[$errmsg])) {
 							$this->errorMessage .= $this->wordbook[$errmsg]."<br />\r\n";

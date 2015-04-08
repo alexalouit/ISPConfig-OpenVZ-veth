@@ -96,52 +96,9 @@ class openvz_plugin {
 		//* Write the configuration of the VM
 		file_put_contents('/etc/vz/conf/'.$veid.'.conf', $data['new']['config']);
 
-		//* check if we have macaddr defined
-		if(isset($data['new']['macaddr']) && !empty($data['new']['macaddr'])) {
-
-			$file = "";
-
-			//* fetch gateway (looks ugly, but works)
-//* TODO: WE NEED TO ADJUST FOR NON-DEBIAN CONFIGUATION?
-			exec('ip route | grep "default via"', $return);
-			preg_match("/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/", $return, $matches);
-			$gateway = $matches[0];
-
-			//* prepare configuration
-//* TODO: WE NEED TO ADJUST FOR NON-DEBIAN CONFIGURATION?
-			$file .= "allow-hotplug eth0\n";
-			$file .= "iface eth0 inet static\n";
-			$file .= "	address " . $data['new']['ip_address'] . "\n";
-//* OVH Failover section:
-/*
-			$file .= "	netmask 255.255.255.255\n";
-			$file .= "	broadcast " . $gateway . "\n";
-*/
-			$file .= "	post-up /sbin/ip route add " . $gateway . " dev eth0\n";
-			$file .= "	post-up /sbin/ip route add default via " . $gateway . "\n";
-			$file .= "	post-down /sbin/ip route del " . $gateway . " dev eth0\n";
-			$file .= "	post-down /sbin/ip route del default via " . $gateway . "\n\n";
-
-			//* start the vm
-			exec("vzctl start $veid");
-
-			$app->log("Starting OpenVZ VM (veth configuration): vzctl start $veid", LOGLEVEL_DEBUG);
-
-			//* write configuration
-			exec("vzctl exec " . $veid . " 'echo \"" . $file . "\" >>/etc/network/interfaces'");
-			exec("vzctl exec " . $veid . " 'echo \"dns-nameservers " . $data['new']['nameserver'] . "\n\" >>/etc/network/interfaces'");
-
-			//* stop the vm if is required
-			if($data['new']['active'] != 'y') {
-				exec("vzctl stop $veid");
-					$app->log("Stopping OpenVZ VM (veth configuration): vzctl stop $veid", LOGLEVEL_DEBUG);
-				}
-			}
-
 		//* Start the VM
 		if($data['new']['active'] == 'y') {
-			exec("vzctl start $veid");
-			$app->log("Starting OpenVZ VM: vzctl start $veid", LOGLEVEL_DEBUG);
+			$this->actions("openvz_start_vm", $veid);
 		}
 
 		//* Set the root password in the virtual machine
@@ -206,7 +163,59 @@ class openvz_plugin {
 			$veid = intval($data);
 			if($veid > 0) {
 				exec("vzctl start $veid");
-				$app->log("Start VM: vzctl start $veid", LOGLEVEL_DEBUG);
+
+				//* check if we have macaddr defined
+				$tmp = $app->db->queryOneRecord("SELECT macaddr,ip_address,nameserver FROM openvz_vm WHERE veid = ".$veid);
+				if(isset($tmp['macaddr']) && !empty($tmp['macaddr'])) {
+
+					$file = "";
+
+					//* fetch gateway (looks ugly, but works)
+		//* TODO: WE NEED TO ADJUST FOR NON-DEBIAN CONFIGUATION?
+					$return = shell_exec('ip route | grep "default via"');
+					preg_match("/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/", $return, $matches);
+					$gateway = $matches[0];
+
+					//* prepare configuration
+		//* TODO: WE NEED TO ADJUST FOR NON-DEBIAN CONFIGURATION?
+					$file .= "# Used by ifup(8) and ifdown(8). See the interfaces(5) manpage or\n";
+					$file .= "# /usr/share/doc/ifupdown/examples for more information.\n\n";
+					$file .= "# The loopback network interface\n";
+					$file .= "auto eth0 lo\n";
+					$file .= "iface lo inet loopback\n";
+					$file .= "allow-hotplug eth0\n";
+					$file .= "iface eth0 inet static\n";
+					$file .= "	address " . $tmp['ip_address'] . "\n";
+
+		//* OVH Failover section:
+		/*
+					$file .= "	netmask 255.255.255.255\n";
+					$file .= "	broadcast " . $gateway . "\n";
+		*/
+// or
+					$file .= "	netmask 255.255.255.0\n";
+
+					$file .= "	post-up /sbin/ip route add " . $gateway . " dev eth0\n";
+					$file .= "	post-up /sbin/ip route add default via " . $gateway . "\n";
+					$file .= "	post-down /sbin/ip route del " . $gateway . " dev eth0\n";
+					$file .= "	post-down /sbin/ip route del default via " . $gateway . "\n\n";
+					$file .= "dns-nameservers " . $tmp['nameserver'] . "\n";
+
+					//* start the vm
+					exec("vzctl start $veid");
+
+					$app->log("Create OpenVZ network configuration: vzctl exec $veid ..", LOGLEVEL_DEBUG);
+
+					//* write configuration
+					exec("vzctl exec " . $veid . " 'echo \"" . $file . "\" > /etc/network/interfaces'");
+
+					$app->log("Reload OpenVZ network configuration: vzctl exec $veid ..", LOGLEVEL_DEBUG);
+
+					//* reload configuration
+					exec("vzctl exec " . $veid . " '/etc/init.d/networking stop && /etc/init.d/networking start'");
+				}
+				unset($tmp);
+
 			}
 			return 'ok';
 		}
