@@ -24,7 +24,7 @@ If is empty, use a clasical venet, if is set, create a veth and configure it (se
 
 ## COMPATIBILITY
 
-ISPConfig 3.0.5.4p5 or newer
+ISPConfig (select version in branche)
 
 
 ## NOTES
@@ -37,24 +37,16 @@ Adjust your network configuration in /usr/local/ispconfig/server/plugins-availab
 
 ## MANUAL INSTALLATION
 
+- patch ispconfig:
 ```
-make backup for each files:
+cp ispconfig.patch /usr/local/ispconfig/ispconfig.patch
+cd /usr/local/ispconfig
+patch -p3 < ./ispconfig.patch
+rm ./ispconfig.patch
+```
 
-copy modified files:
-/usr/local/ispconfig/interface/lib/classes/remoting_lib.inc.php
-/usr/local/ispconfig/interface/lib/classes/tform.inc.php
-/usr/local/ispconfig/interface/web/vm/form/openvz_ip.tform.php
-/usr/local/ispconfig/interface/web/vm/list/openvz_ip.list.php
-/usr/local/ispconfig/interface/web/vm/templates/openvz_ip_edit.htm
-/usr/local/ispconfig/interface/web/vm/templates/openvz_ip_list.htm
-/usr/local/ispconfig/interface/web/vm/lib/lang/*_openvz_ip*.lng
-/usr/local/ispconfig/server/plugins-available/openvz_plugin.inc.php
-/usr/local/ispconfig/interface/lib/plugins/vm_openvz_plugin.inc.php
-
-add file:
-/usr/local/ispconfig/interface/web/vm/templates/openvz-veth.conf.tpl
-
-sql queries:
+- sql quueries:
+```
 ALTER TABLE `openvz_ip` ADD `macaddr` varchar(20) DEFAULT NULL;
 ALTER TABLE `openvz_vm` ADD `macaddr` varchar(20) DEFAULT NULL;
-``
+```

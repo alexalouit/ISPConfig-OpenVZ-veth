@@ -1,0 +1,890 @@
+diff -r -u -N /root/ispconfig/interface/lib/classes/remoting_lib.inc.php /usr/local/ispconfig/interface/interface/lib/classes/remoting_lib.inc.php
+--- /root/ispconfig/interface/lib/classes/remoting_lib.inc.php	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/lib/classes/remoting_lib.inc.php	2015-04-09 04:06:18.000000000 +0200
+@@ -634,6 +634,21 @@
+ 					}
+ 				}
+ 				break;
++			case 'ISMACADDR':
++				if($validator['allowempty'] != 'y') $validator['allowempty'] = 'n';
++				if($validator['allowempty'] == 'y' && $field_value == '') {
++					//* Do nothing
++				} else {
++					if(!preg_match("(?:[A-Fa-f0-9]{2}[:-]){5}(?:[A-Fa-f0-9]{2})", $field_value)) {
++						$errmsg = $validator['errmsg'];
++						if(isset($this->wordbook[$errmsg])) {
++							$this->errorMessage .= $this->wordbook[$errmsg]."<br />\r\n";
++						} else {
++							$this->errorMessage .= $errmsg."<br />\r\n";
++						}
++					}
++				}
++				break;
+ 			case 'RANGE':
+ 				//* Checks if the value is within the given range or above / below a value
+ 				//* Range examples: < 10 = ":10", between 2 and 10 = "2:10", above 5 = "5:".
+diff -r -u -N /root/ispconfig/interface/lib/classes/tform.inc.php /usr/local/ispconfig/interface/interface/lib/classes/tform.inc.php
+--- /root/ispconfig/interface/lib/classes/tform.inc.php	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/lib/classes/tform.inc.php	2015-04-09 04:06:18.000000000 +0200
+@@ -295,7 +295,7 @@
+ 		return $values;
+ 
+ 	}
+-	
++
+ 	/*
+ 	function table_auth_sql($matches){
+ 		return $this->getAuthSQL('r', $matches[1]);
+@@ -991,7 +991,7 @@
+ 							if(preg_match("/^(\:\:([a-f0-9]{1,4}\:){0,6}?[a-f0-9]{0,4}|[a-f0-9]{1,4}(\:[a-f0-9]{1,4}){0,6}?\:\:|[a-f0-9]{1,4}(\:[a-f0-9]{1,4}){1,6}?\:\:([a-f0-9]{1,4}\:){1,6}?[a-f0-9]{1,4})(\/\d{1,3})?$/i", $field_value)){
+ 								$ip_ok = 1;
+ 							}
+-							if(preg_match("/^[0-9]{1,3}(\.)[0-9]{1,3}(\.)[0-9]{1,3}(\.)[0-9]{1,3}$/", $field_value)){
++							if(preg_match("(?:[A-Fa-f0-9]{2}[:-]){5}(?:[A-Fa-f0-9]{2})", $field_value)){
+ 								$ip_ok = 1;
+ 							}
+ 							if($ip_ok == 0) {
+@@ -1006,6 +1006,21 @@
+ 					}
+ 				}
+ 				break;
++			case 'ISMACADDR':
++				if($validator['allowempty'] != 'y') $validator['allowempty'] = 'n';
++				if($validator['allowempty'] == 'y' && $field_value == '') {
++					//* Do nothing
++				} else {
++					if(!preg_match("/^(?:[0-9A-F]{2}[:]?){5}(?:[0-9A-F]{2}?)$/i", $field_value)) {
++						$errmsg = $validator['errmsg'];
++						if(isset($this->wordbook[$errmsg])) {
++							$this->errorMessage .= $this->wordbook[$errmsg]."<br />\r\n";
++						} else {
++							$this->errorMessage .= $errmsg."<br />\r\n";
++						}
++					}
++				}
++				break;
+ 			case 'RANGE':
+ 				//* Checks if the value is within the given range or above / below a value
+ 				//* Range examples: < 10 = ":10", between 2 and 10 = "2:10", above 5 = "5:".
+@@ -1061,7 +1076,7 @@
+ 	function getSQL($record, $tab, $action = 'INSERT', $primary_id = 0, $sql_ext_where = '') {
+ 
+ 		global $app;
+-		
++
+ 		$primary_id = $app->functions->intval($primary_id);
+ 
+ 		// If there are no data records on the tab, return empty sql string
+@@ -1302,10 +1317,10 @@
+ 
+ 	function getAuthSQL($perm, $table = '') {
+ 		global $app;
+-		
++
+ 		$perm = $app->db->quote($perm);
+ 		$table = $app->db->quote($table);
+-		
++
+ 		if($_SESSION["s"]["user"]["typ"] == 'admin' || $_SESSION['s']['user']['mailuser_id'] > 0) {
+ 			return '1';
+ 		} else {
+diff -r -u -N /root/ispconfig/interface/lib/plugins/vm_openvz_plugin.inc.php /usr/local/ispconfig/interface/interface/lib/plugins/vm_openvz_plugin.inc.php
+--- /root/ispconfig/interface/lib/plugins/vm_openvz_plugin.inc.php	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/lib/plugins/vm_openvz_plugin.inc.php	2015-04-09 04:06:18.000000000 +0200
+@@ -143,12 +143,25 @@
+ 
+ 		$vm = $app->db->queryOneRecord("SELECT * FROM openvz_vm WHERE vm_id = ".$app->functions->intval($this->id));
+ 		$vm_template = $app->db->queryOneRecord("SELECT * FROM openvz_template WHERE template_id = ".$app->functions->intval($vm['template_id']));
++
++
+ 		$burst_ram = $vm['ram_burst']*256;
+ 		$guar_ram = $vm['ram']*256;
+ 
++
+ 		$app->load('tpl');
+ 		$tpl = new tpl();
+-		$tpl->newTemplate('../vm/templates/openvz.conf.tpl');
++
++		// Check we have a macaddr
++		$tmp = $app->db->queryOneRecord("SELECT macaddr FROM openvz_ip WHERE vm_id = ".$app->functions->intval($this->id));
++		if(isset($tmp['macaddr']) && !empty($tmp['macaddr'])) {
++			// We have an macaddr
++			$tpl->newTemplate('../vm/templates/openvz-veth.conf.tpl');
++		} else {
++			// We don't have macaddr
++			$tpl->newTemplate('../vm/templates/openvz.conf.tpl');
++		}
++
+ 
+ 		$onboot = ($vm['start_boot'] == 'y')?'yes':'no';
+ 		$tpl->setVar('onboot', $onboot);
+@@ -190,17 +203,35 @@
+ 		$hostname = str_replace('{VEID}', $vm['veid'], $vm['hostname']);
+ 
+ 		$tpl->setVar('hostname', $hostname);
+-		$tpl->setVar('ip_address', $vm['ip_address']);
++
++		if(isset($tmp['macaddr']) && !empty($tmp['macaddr'])) {
++			// fetch vmbr0 macaddr
++			$return = shell_exec('ifconfig vmbr0 | grep HWaddr');
++			preg_match("(?:[A-Fa-f0-9]{2}[:-]){5}(?:[A-Fa-f0-9]{2})", $return, $matches);
++			$host_macaddr = $matches[0];
++
++			$tpl->setVar('macaddr', $tmp['macaddr']);
++			$tpl->setVar('veid', $tmp['veid']);
++			$tpl->setVar('host_macaddr', $host_macaddr);
++		} else {
++			$tpl->setVar('ip_address', $vm['ip_address']);
++		}
++
+ 		$tpl->setVar('nameserver', $vm['nameserver']);
+ 		$tpl->setVar('capability', $vm['capability']);
+ 
+-		$tmp = $app->db->queryOneRecord("SELECT template_file FROM openvz_ostemplate WHERE ostemplate_id = ".$app->functions->intval($vm['ostemplate_id']));
+-		$tpl->setVar('ostemplate', $tmp['template_file']);
+-		unset($tmp);
++		$tmp1 = $app->db->queryOneRecord("SELECT template_file FROM openvz_ostemplate WHERE ostemplate_id = ".$app->functions->intval($vm['ostemplate_id']));
++		$tpl->setVar('ostemplate', $tmp1['template_file']);
++		unset($tmp1);
+ 
+ 		$openvz_config = $app->db->quote($tpl->grab());
+ 		$app->db->query("UPDATE openvz_vm SET config = '".$openvz_config."' WHERE vm_id = ".$app->functions->intval($this->id));
+ 
++		if(isset($tmp['macaddr']) && !empty($tmp['macaddr'])) {
++			$app->db->query("UPDATE openvz_vm SET macaddr = '".$tmp['macaddr']."' WHERE vm_id = ".$app->functions->intval($this->id));
++		}
++
++		unset($tmp);
+ 		unset($tpl);
+ 
+ 	}
+diff -r -u -N /root/ispconfig/interface/web/vm/form/openvz_ip.tform.php /usr/local/ispconfig/interface/interface/web/vm/form/openvz_ip.tform.php
+--- /root/ispconfig/interface/web/vm/form/openvz_ip.tform.php	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/form/openvz_ip.tform.php	2015-04-09 04:06:18.000000000 +0200
+@@ -91,6 +91,25 @@
+ 			'cols'  => '',
+ 			'searchable' => 1
+ 		),
++		'macaddr' => array (
++			'datatype' => 'VARCHAR',
++			'formtype' => 'TEXT',
++			'validators' => array (  0 => array ( 'type' => 'ISMACADDR',
++					'allowempty' => 'y',
++					'errmsg'=> 'macaddr_error_wrong'),
++				1 => array ( 'type' => 'UNIQUE',
++					'allowempty' => 'y',
++					'errmsg'=> 'macaddr_error_unique'),
++			),
++			'default' => '',
++			'value'  => '',
++			'separator' => '',
++			'width'  => '17',
++			'maxlength' => '17',
++			'rows'  => '',
++			'cols'  => '',
++			'searchable' => 1
++		),
+ 		'vm_id' => array (
+ 			'datatype' => 'INTEGER',
+ 			'formtype' => 'SELECT',
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/ar_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/ar_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/ar_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/ar_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Please fill in a valid IPv4 address.';
+ $wb['ip_error_unique'] = 'This IP address does already exist.';
+ $wb['IP address'] = 'IP address';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/ar_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/ar_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/ar_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/ar_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['ip_address_txt'] = 'IP address';
+ $wb['reserved_txt'] = 'Reserved';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/bg_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/bg_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/bg_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/bg_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Please fill in a valid IPv4 address.';
+ $wb['ip_error_unique'] = 'This IP address does already exist.';
+ $wb['IP address'] = 'IP address';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/bg_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/bg_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/bg_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/bg_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['ip_address_txt'] = 'IP address';
+ $wb['reserved_txt'] = 'Reserved';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/br_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/br_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/br_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/br_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Please fill in a valid IPv4 address.';
+ $wb['ip_error_unique'] = 'This IP address does already exist.';
+ $wb['IP address'] = 'IP address';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/br_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/br_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/br_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/br_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['ip_address_txt'] = 'IP address';
+ $wb['reserved_txt'] = 'Reserved';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/cz_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/cz_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/cz_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/cz_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,5 +6,7 @@
+ $wb['ip_error_wrong'] = 'Please fill in a valid IPv4 address.';
+ $wb['ip_error_unique'] = 'This IP address does already exist.';
+ $wb['IP address'] = 'IP address';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+-
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/cz_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/cz_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/cz_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/cz_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,5 +4,6 @@
+ $wb['ip_address_txt'] = 'IP address';
+ $wb['reserved_txt'] = 'Reserved';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+ 
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/de_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/de_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/de_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/de_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Bitte tragen Sie eine gültige IPv4-Adresse ein.';
+ $wb['ip_error_unique'] = 'Diese IP-Adresse existiert bereits.';
+ $wb['IP address'] = 'IP-Adresse';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/de_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/de_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/de_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/de_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['vm_id_txt'] = 'VM';
+ $wb['ip_address_txt'] = 'IP-Adresse';
+ $wb['reserved_txt'] = 'Reserviert';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/el_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/el_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/el_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/el_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Παρακαλούμε συμπληρώστε μια έγκυρη διεύθυνση IPv4.';
+ $wb['ip_error_unique'] = 'Η διεύθυνση IP υπάρχει ήδη.';
+ $wb['IP address'] = 'Διεύθυνση IP';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/el_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/el_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/el_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/el_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['ip_address_txt'] = 'Διεύθυνση IP';
+ $wb['reserved_txt'] = 'Reserved';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/en_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/en_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/en_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/en_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb["ip_error_wrong"] = 'Please fill in a valid IPv4 address.';
+ $wb["ip_error_unique"] = 'This IP address does already exist.';
+ $wb["IP address"] = 'IP address';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+\ No newline at end of file
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/en_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/en_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/en_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/en_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['vm_id_txt'] = 'VM';
+ $wb["ip_address_txt"] = 'IP address';
+ $wb["reserved_txt"] = 'Reserved';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+\ No newline at end of file
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/es_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/es_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/es_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/es_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Por favor, rellene una direcciíón IPv4 válida.';
+ $wb['ip_error_unique'] = 'Esta dirección IP no existe.';
+ $wb['IP address'] = 'IP dirección';
+-?>
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
++?>
+\ No newline at end of file
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/es_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/es_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/es_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/es_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['ip_address_txt'] = 'Dirección IP';
+ $wb['reserved_txt'] = 'Reservado';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/fi_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/fi_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/fi_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/fi_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Please fill in a valid IPv4 address.';
+ $wb['ip_error_unique'] = 'This IP address does already exist.';
+ $wb['IP address'] = 'IP address';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/fi_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/fi_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/fi_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/fi_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['ip_address_txt'] = 'IP address';
+ $wb['reserved_txt'] = 'Reserved';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/fr_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/fr_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/fr_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/fr_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Renseignez une adresse IPv4 valide.';
+ $wb['ip_error_unique'] = 'L\'adresse IP existe déjà.';
+ $wb['IP address'] = 'Adresse IP';
+-?>
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Renseignez une macaddr valide.';
++$wb["macaddr_error_unique"] = 'Cette macaddr existe déjà.';
++?>
+\ No newline at end of file
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/fr_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/fr_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/fr_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/fr_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['ip_address_txt'] = 'Adresse IP';
+ $wb['reserved_txt'] = 'Reservé';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/hr_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/hr_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/hr_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/hr_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,6 +6,7 @@
+ $wb['ip_error_wrong'] = 'Unesite ispravnu IPv4 adresu.';
+ $wb['ip_error_unique'] = 'Ova IP adresa već postoji.';
+ $wb['IP address'] = 'IP adresa';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+-
+-
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/hr_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/hr_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/hr_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/hr_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,6 +4,7 @@
+ $wb['ip_address_txt'] = 'IP adresa';
+ $wb['reserved_txt'] = 'Rezervirano';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+ 
+ 
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/hu_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/hu_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/hu_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/hu_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Please fill in a valid IPv4 address.';
+ $wb['ip_error_unique'] = 'This IP address does already exist.';
+ $wb['IP address'] = 'IP address';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/hu_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/hu_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/hu_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/hu_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['ip_address_txt'] = 'IP address';
+ $wb['reserved_txt'] = 'Reserved';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/id_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/id_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/id_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/id_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Please fill in a valid IPv4 address.';
+ $wb['ip_error_unique'] = 'This IP address does already exist.';
+ $wb['IP address'] = 'IP address';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/id_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/id_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/id_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/id_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['ip_address_txt'] = 'IP address';
+ $wb['reserved_txt'] = 'Reserved';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/it_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/it_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/it_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/it_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Please fill in a valid IPv4 address.';
+ $wb['ip_error_unique'] = 'This IP address does already exist.';
+ $wb['IP address'] = 'IP address';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/it_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/it_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/it_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/it_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['ip_address_txt'] = 'IP address';
+ $wb['reserved_txt'] = 'Reserved';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/ja_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/ja_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/ja_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/ja_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Please fill in a valid IPv4 address.';
+ $wb['ip_error_unique'] = 'This IP address does already exist.';
+ $wb['IP address'] = 'IP address';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/ja_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/ja_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/ja_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/ja_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['ip_address_txt'] = 'IP address';
+ $wb['reserved_txt'] = 'Reserved';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/nl_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/nl_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/nl_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/nl_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Please fill in a valid IPv4 address.';
+ $wb['ip_error_unique'] = 'This IP address does already exist.';
+ $wb['IP address'] = 'IP address';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/nl_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/nl_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/nl_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/nl_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['ip_address_txt'] = 'IP address';
+ $wb['reserved_txt'] = 'Reserved';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/pl_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/pl_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/pl_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/pl_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Please fill in a valid IPv4 address.';
+ $wb['ip_error_unique'] = 'This IP address does already exist.';
+ $wb['IP address'] = 'IP address';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/pl_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/pl_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/pl_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/pl_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['ip_address_txt'] = 'Adresy IP';
+ $wb['reserved_txt'] = 'Zarezerwowany';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/pt_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/pt_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/pt_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/pt_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Please fill in a valid IPv4 address.';
+ $wb['ip_error_unique'] = 'This IP address does already exist.';
+ $wb['IP address'] = 'IP address';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/pt_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/pt_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/pt_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/pt_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['ip_address_txt'] = 'IP address';
+ $wb['reserved_txt'] = 'Reserved';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/ro_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/ro_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/ro_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/ro_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Please fill in a valid IPv4 address.';
+ $wb['ip_error_unique'] = 'This IP address does already exist.';
+ $wb['IP address'] = 'IP address';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/ro_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/ro_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/ro_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/ro_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['ip_address_txt'] = 'IP address';
+ $wb['reserved_txt'] = 'Reserved';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/ru_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/ru_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/ru_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/ru_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Please fill in a valid IPv4 address.';
+ $wb['ip_error_unique'] = 'This IP address does already exist.';
+ $wb['IP address'] = 'IP address';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/ru_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/ru_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/ru_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/ru_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['ip_address_txt'] = 'IP address';
+ $wb['reserved_txt'] = 'Reserved';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/se_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/se_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/se_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/se_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Please fill in a valid IPv4 address.';
+ $wb['ip_error_unique'] = 'This IP address does already exist.';
+ $wb['IP address'] = 'IP address';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/se_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/se_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/se_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/se_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['ip_address_txt'] = 'IP address';
+ $wb['reserved_txt'] = 'Reserved';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/sk_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/sk_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/sk_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/sk_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Please fill in a valid IPv4 address.';
+ $wb['ip_error_unique'] = 'This IP address does already exist.';
+ $wb['IP address'] = 'IP address';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/sk_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/sk_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/sk_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/sk_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['ip_address_txt'] = 'IP address';
+ $wb['reserved_txt'] = 'Reserved';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/tr_openvz_ip.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/tr_openvz_ip.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/tr_openvz_ip.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/tr_openvz_ip.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -6,4 +6,7 @@
+ $wb['ip_error_wrong'] = 'Please fill in a valid IPv4 address.';
+ $wb['ip_error_unique'] = 'This IP address does already exist.';
+ $wb['IP address'] = 'IP address';
++$wb["macaddr_txt"] = 'MACADDR';
++$wb["macaddr_error_wrong"] = 'Please fill in a valid macaddr.';
++$wb["macaddr_error_unique"] = 'This macaddr does already exist.';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/lib/lang/tr_openvz_ip_list.lng /usr/local/ispconfig/interface/interface/web/vm/lib/lang/tr_openvz_ip_list.lng
+--- /root/ispconfig/interface/web/vm/lib/lang/tr_openvz_ip_list.lng	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/lib/lang/tr_openvz_ip_list.lng	2015-04-09 04:06:18.000000000 +0200
+@@ -4,4 +4,5 @@
+ $wb['ip_address_txt'] = 'IP address';
+ $wb['reserved_txt'] = 'Reserved';
+ $wb['vm_id_txt'] = 'VM';
++$wb["macaddr_txt"] = 'MACADDR';
+ ?>
+diff -r -u -N /root/ispconfig/interface/web/vm/list/openvz_ip.list.php /usr/local/ispconfig/interface/interface/web/vm/list/openvz_ip.list.php
+--- /root/ispconfig/interface/web/vm/list/openvz_ip.list.php	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/list/openvz_ip.list.php	2015-04-09 04:06:18.000000000 +0200
+@@ -84,6 +84,15 @@
+ 	'width'  => "",
+ 	'value'  => "");
+ 
++$liste["item"][] = array( 'field'  => "macaddr",
++	'datatype' => "VARCHAR",
++	'formtype' => "TEXT",
++	'op'  => "like",
++	'prefix' => "%",
++	'suffix' => "%",
++	'width'  => "",
++	'value'  => "");
++
+ $liste["item"][] = array( 'field'  => "reserved",
+ 	'datatype' => "VARCHAR",
+ 	'formtype' => "SELECT",
+diff -r -u -N /root/ispconfig/interface/web/vm/templates/openvz-veth.conf.tpl /usr/local/ispconfig/interface/interface/web/vm/templates/openvz-veth.conf.tpl
+--- /root/ispconfig/interface/web/vm/templates/openvz-veth.conf.tpl	1970-01-01 01:00:00.000000000 +0100
++++ /usr/local/ispconfig/interface/interface/web/vm/templates/openvz-veth.conf.tpl	2015-04-09 04:06:18.000000000 +0200
+@@ -0,0 +1,50 @@
++
++# Template version
++VERSION="2"
++
++# Parameters
++ONBOOT="{tmpl_var name='onboot'}"
++KMEMSIZE="{tmpl_var name='kmemsize'}"
++LOCKEDPAGES="{tmpl_var name='lockedpages'}"
++PRIVVMPAGES="{tmpl_var name='privvmpages'}"
++SHMPAGES="{tmpl_var name='shmpages'}"
++NUMPROC="{tmpl_var name='numproc'}"
++PHYSPAGES="{tmpl_var name='physpages'}"
++VMGUARPAGES="{tmpl_var name='vmguarpages'}"
++OOMGUARPAGES="{tmpl_var name='oomguarpages'}"
++NUMTCPSOCK="{tmpl_var name='numtcpsock'}"
++NUMFLOCK="{tmpl_var name='numflock'}"
++NUMPTY="{tmpl_var name='numpty'}"
++NUMSIGINFO="{tmpl_var name='numsiginfo'}"
++TCPSNDBUF="{tmpl_var name='tcpsndbuf'}"
++TCPRCVBUF="{tmpl_var name='tcprcvbuf'}"
++OTHERSOCKBUF="{tmpl_var name='othersockbuf'}"
++DGRAMRCVBUF="{tmpl_var name='dgramrcvbuf'}"
++NUMOTHERSOCK="{tmpl_var name='numothersock'}"
++DCACHESIZE="{tmpl_var name='dcachesize'}"
++NUMFILE="{tmpl_var name='numfile'}"
++AVNUMPROC="{tmpl_var name='avnumproc'}"
++NUMIPTENT="{tmpl_var name='numiptent'}"
++
++DISKSPACE="{tmpl_var name='diskspace'}"
++DISKINODES="{tmpl_var name='diskinodes'}"
++QUOTAUGIDLIMIT="10000"
++IOPRIO="{tmpl_var name='io_priority'}"
++QUOTATIME="0"
++
++CPUS="{tmpl_var name='cpu_num'}"
++CPUUNITS="{tmpl_var name='cpu_units'}"
++CPULIMIT="{tmpl_var name='cpu_limit'}"
++
++VE_ROOT="/vz/root/$VEID"
++VE_PRIVATE="/vz/private/$VEID"
++OSTEMPLATE="{tmpl_var name='ostemplate'}"
++ORIGIN_SAMPLE="vps.basic"
++HOSTNAME="{tmpl_var name='hostname'}"
++NETIF="ifname=eth0,bridge=vmbr0,mac={tmpl_var name='macaddr'},host_ifname=veth{tmpl_var name='veid'}.0,host_mac={tmpl_var name='host_macaddr'}"
++NAMESERVER="{tmpl_var name='nameserver'}"
++# alternative meminfo: "pages:256000"
++MEMINFO="privvmpages:1"
++# SWAPPAGES="{tmpl_var name='swappages'}"
++
++CAPABILITY="{tmpl_var name='capability'}"
+diff -r -u -N /root/ispconfig/interface/web/vm/templates/openvz_ip_edit.htm /usr/local/ispconfig/interface/interface/web/vm/templates/openvz_ip_edit.htm
+--- /root/ispconfig/interface/web/vm/templates/openvz_ip_edit.htm	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/templates/openvz_ip_edit.htm	2015-04-09 04:06:18.000000000 +0200
+@@ -16,6 +16,10 @@
+                 <input name="ip_address" id="ip_address" value="{tmpl_var name='ip_address'}" size="15" maxlength="15" type="text" class="textInput" />
+             </div>
+             <div class="ctrlHolder">
++                <label for="macaddr">{tmpl_var name='macaddr_txt'}</label>
++                <input name="macaddr" id="macaddr" value="{tmpl_var name='macaddr'}" size="17" maxlength="17" type="text" class="textInput" />
++            </div>
++            <div class="ctrlHolder">
+                 <label for="vm_id">{tmpl_var name='vm_id_txt'}</label>
+                 <select name="vm_id" id="vm_id" class="selectInput" disabled="disabled">
+                     {tmpl_var name='vm_id'}
+@@ -28,19 +32,19 @@
+                 </div>
+             </div>
+         </fieldset>
+-            
++
+         <input type="hidden" name="id" value="{tmpl_var name='id'}">
+-            
++
+         <div class="buttonHolder buttons">
+             <button class="positive iconstxt icoPositive" type="button" value="{tmpl_var name='btn_save_txt'}" onclick="submitForm('pageForm','vm/openvz_ip_edit.php');"><span>{tmpl_var name='btn_save_txt'}</span></button>
+             <button class="negative iconstxt icoNegative" type="button" value="{tmpl_var name='btn_cancel_txt'}" onclick="loadContent('vm/openvz_ip_list.php');"><span>{tmpl_var name='btn_cancel_txt'}</span></button>
+         </div>
+     </div>
+-  
++
+ </div>
+ <script language="JavaScript" type="text/javascript">
+     var vm_id = jQuery('#vm_id').val();
+     jQuery('#vm_id').attr({name: 'vm_id_disabled', id: 'vm_id_disabled'});
+     jQuery('#vm_id_disabled').after('<input type="hidden" name="vm_id" value="'+vm_id+'">');
+-    
++
+ </script>
+\ No newline at end of file
+diff -r -u -N /root/ispconfig/interface/web/vm/templates/openvz_ip_list.htm /usr/local/ispconfig/interface/interface/web/vm/templates/openvz_ip_list.htm
+--- /root/ispconfig/interface/web/vm/templates/openvz_ip_list.htm	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/interface/web/vm/templates/openvz_ip_list.htm	2015-04-09 04:06:18.000000000 +0200
+@@ -20,6 +20,7 @@
+                         <th class="tbl_col_server_id" scope="col"><tmpl_var name="server_id_txt"></th>
+                         <th class="tbl_col_vm_id" scope="col"><tmpl_var name="vm_id_txt"></th>
+                         <th class="tbl_col_ip_address" scope="col"><tmpl_var name="ip_address_txt"></th>
++                        <th class="tbl_col_macaddr" scope="col"><tmpl_var name="ip_macaddr_txt"></th>
+                         <th class="tbl_col_reserved" scope="col"><tmpl_var name="reserved_txt"></th>
+                         <th class="tbl_col_limit" scope="col">{tmpl_var name='search_limit'}</th>
+                     </tr>
+@@ -27,6 +28,7 @@
+                         <td class="tbl_col_server_id"><select name="search_server_id">{tmpl_var name='search_server_id'}</select></td>
+                         <td class="tbl_col_vm_id"><select name="search_vm_id">{tmpl_var name='search_vm_id'}</select></td>
+                         <td class="tbl_col_ip_address"><input type="text" name="search_ip_address" value="{tmpl_var name='search_ip_address'}" /></td>
++                        <td class="tbl_col_macaddr"><input type="text" name="search_macaddr" value="{tmpl_var name='search_macaddr'}" /></td>
+                         <td class="tbl_col_reserved"><select name="search_reserved">{tmpl_var name='search_reserved'}</select></td>
+                         <td class="tbl_col_buttons">
+                             <button type="button" class="button icons16 icoFilter" name="Filter" id="Filter" value="{tmpl_var name="filter_txt"}" onclick="submitForm('pageForm','vm/openvz_ip_list.php');"><span>{tmpl_var name="filter_txt"}</span></button>
+@@ -39,6 +41,7 @@
+                             <td class="tbl_col_server_id"><a href="#" onclick="loadContent('vm/openvz_ip_edit.php?id={tmpl_var name='id'}');">{tmpl_var name="server_id"}</a></td>
+                             <td class="tbl_col_vm_id"><a href="#" onclick="loadContent('vm/openvz_ip_edit.php?id={tmpl_var name='id'}');">{tmpl_var name="vm_id"}</a></td>
+                             <td class="tbl_col_ip_address"><a href="#" onclick="loadContent('vm/openvz_ip_edit.php?id={tmpl_var name='id'}');">{tmpl_var name="ip_address"}</a></td>
++                            <td class="tbl_col_macaddr"><a href="#" onclick="loadContent('vm/openvz_ip_edit.php?id={tmpl_var name='id'}');">{tmpl_var name="macaddr"}</a></td>
+                             <td class="tbl_col_reserved"><a href="#" onclick="loadContent('vm/openvz_ip_edit.php?id={tmpl_var name='id'}');">{tmpl_var name="reserved"}</a></td>
+                             <td class="tbl_col_buttons">
+                                 <a class="button icons16 icoDelete" href="javascript: del_record('vm/openvz_ip_del.php?id={tmpl_var name='id'}&phpsessid={tmpl_var name='phpsessid'}','{tmpl_var name='delete_confirmation'}');"><span>{tmpl_var name='delete_txt'}</span></a>
+@@ -47,13 +50,13 @@
+                     </tmpl_loop>
+                     <tmpl_unless name="records">
+                         <tr class="tbl_row_noresults tbl_row_<tmpl_if name='__EVEN__'}even<tmpl_else>uneven</tmpl_if>">
+-                            <td colspan="5">{tmpl_var name='globalsearch_noresults_text_txt'}</td>
++                            <td colspan="6">{tmpl_var name='globalsearch_noresults_text_txt'}</td>
+                         </tr>
+                     </tmpl_unless>
+                 </tbody>
+                 <tfoot>
+                     <tr>
+-                        <td class="tbl_footer tbl_paging" colspan="5"><tmpl_var name="paging"></td>
++                        <td class="tbl_footer tbl_paging" colspan="6"><tmpl_var name="paging"></td>
+                     </tr>
+                 </tfoot>
+             </table>
+diff -r -u -N /root/ispconfig/server/plugins-available/openvz_plugin.inc.php /usr/local/ispconfig/interface/server/plugins-available/openvz_plugin.inc.php
+--- /root/ispconfig/server/plugins-available/openvz_plugin.inc.php	2015-05-07 18:08:03.000000000 +0200
++++ /usr/local/ispconfig/interface/server/plugins-available/openvz_plugin.inc.php	2015-04-09 04:06:18.000000000 +0200
+@@ -98,8 +98,7 @@
+ 
+ 		//* Start the VM
+ 		if($data['new']['active'] == 'y') {
+-			exec("vzctl start $veid");
+-			$app->log("Starting OpenVZ VM: vzctl start $veid", LOGLEVEL_DEBUG);
++			$this->actions("openvz_start_vm", $veid);
+ 		}
+ 
+ 		//* Set the root password in the virtual machine
+@@ -164,7 +163,59 @@
+ 			$veid = intval($data);
+ 			if($veid > 0) {
+ 				exec("vzctl start $veid");
+-				$app->log("Start VM: vzctl start $veid", LOGLEVEL_DEBUG);
++
++				//* check if we have macaddr defined
++				$tmp = $app->db->queryOneRecord("SELECT macaddr,ip_address,nameserver FROM openvz_vm WHERE veid = ".$veid);
++				if(isset($tmp['macaddr']) && !empty($tmp['macaddr'])) {
++
++					$file = "";
++
++					//* fetch gateway (looks ugly, but works)
++		//* TODO: WE NEED TO ADJUST FOR NON-DEBIAN CONFIGUATION?
++					$return = shell_exec('ip route | grep "default via"');
++					preg_match("/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/", $return, $matches);
++					$gateway = $matches[0];
++
++					//* prepare configuration
++		//* TODO: WE NEED TO ADJUST FOR NON-DEBIAN CONFIGURATION?
++					$file .= "# Used by ifup(8) and ifdown(8). See the interfaces(5) manpage or\n";
++					$file .= "# /usr/share/doc/ifupdown/examples for more information.\n\n";
++					$file .= "# The loopback network interface\n";
++					$file .= "auto eth0 lo\n";
++					$file .= "iface lo inet loopback\n";
++					$file .= "allow-hotplug eth0\n";
++					$file .= "iface eth0 inet static\n";
++					$file .= "	address " . $tmp['ip_address'] . "\n";
++
++		//* OVH Failover section:
++		/*
++					$file .= "	netmask 255.255.255.255\n";
++					$file .= "	broadcast " . $gateway . "\n";
++		*/
++// or
++					$file .= "	netmask 255.255.255.0\n";
++
++					$file .= "	post-up /sbin/ip route add " . $gateway . " dev eth0\n";
++					$file .= "	post-up /sbin/ip route add default via " . $gateway . "\n";
++					$file .= "	post-down /sbin/ip route del " . $gateway . " dev eth0\n";
++					$file .= "	post-down /sbin/ip route del default via " . $gateway . "\n\n";
++					$file .= "dns-nameservers " . $tmp['nameserver'] . "\n";
++
++					//* start the vm
++					exec("vzctl start $veid");
++
++					$app->log("Create OpenVZ network configuration: vzctl exec $veid ..", LOGLEVEL_DEBUG);
++
++					//* write configuration
++					exec("vzctl exec " . $veid . " 'echo \"" . $file . "\" > /etc/network/interfaces'");
++
++					$app->log("Reload OpenVZ network configuration: vzctl exec $veid ..", LOGLEVEL_DEBUG);
++
++					//* reload configuration
++					exec("vzctl exec " . $veid . " '/etc/init.d/networking stop && /etc/init.d/networking start'");
++				}
++				unset($tmp);
++
+ 			}
+ 			return 'ok';
+ 		}
